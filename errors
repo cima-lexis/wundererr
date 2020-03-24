@@ -1,0 +1,11 @@
+2020/03/24 12:41:48 unexpected end of JSON input
+panic: unexpected end of JSON input
+
+goroutine 35 [running]:
+log.Panic(0xc000060ee8, 0x1, 0x1)
+	/home/parroit/.gvm/gos/go1.14/src/log/log.go:351 +0xac
+github.com/cima-lexis/wundererr/wundprepare.readObservationsFromFile(0x7ffcb363ebbc, 0x8, 0xc000020120)
+	/home/parroit/cimarepos/wunderr/wundprepare/step.go:157 +0x59c
+created by github.com/cima-lexis/wundererr/wundprepare.Run
+	/home/parroit/cimarepos/wunderr/wundprepare/step.go:185 +0x134
+exit status 2
