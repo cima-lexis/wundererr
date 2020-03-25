@@ -6,6 +6,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/cima-lexis/wundererr/eradownload"
+	"github.com/cima-lexis/wundererr/eraprepare"
 	"github.com/cima-lexis/wundererr/wunddownload"
 	"github.com/cima-lexis/wundererr/wundprepare"
 )
@@ -26,8 +28,8 @@ func main() {
 	domain := wundprepare.Run(date)
 	fmt.Printf("%f:%f - %f:%f\n", domain.MinLat, domain.MinLon, domain.MaxLat, domain.MaxLon)
 
-	// eradownload.Download(date)
-	// eradownload.Download(datePrev(date))
-	// eraprepare.Run(datePrev(date), domain)
-	// eraprepare.Run(date, domain)
+	eradownload.Download(date)
+	eradownload.Download(datePrev(date))
+
+	eraprepare.Run(datePrev(date), date, domain)
 }
