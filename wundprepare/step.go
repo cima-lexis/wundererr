@@ -13,6 +13,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/cima-lexis/wundererr/core"
 )
@@ -22,6 +23,7 @@ type station struct {
 	ID        string
 	Latitude  float64
 	Longitude float64
+	Tz        int
 }
 
 // read list of stations to read from a JSON file.
@@ -190,9 +192,28 @@ func readObservationsFromFile(date string, obsRead chan map[string]interface{}) 
 	close(obsRead)
 }
 
+type stationDataBuffer struct {
+	Tz           int
+	observations []interface{}
+	daysRead     int
+}
+
+func buildStationsByCode(stations []station) map[string]*stationDataBuffer {
+	index := make(map[string]*stationDataBuffer)
+	for _, st := range stations {
+		index[st.ID] = &stationDataBuffer{
+			Tz:           st.Tz,
+			observations: []interface{}{},
+			daysRead:     0,
+		}
+	}
+	return index
+}
+
 func Run(date string) *core.Domain {
 	targetFile := "data/prep-wund-" + date + ".json"
 	stations := readStationsFromFile()
+	stationsByCode := buildStationsByCode(stations)
 
 	_, err := os.Stat(targetFile)
 	if err == nil {
@@ -224,8 +245,37 @@ func Run(date string) *core.Domain {
 		idx++
 		el := elevations[obs["ID"].(string)]
 		obs["elevation"] = el.elevation
-		obs["latitute"] = el.lat
+		obs["latitude"] = el.lat
 		obs["longitude"] = el.lon
+
+		station := stationsByCode[obs["ID"].(string)]
+
+		if station.Tz > 0 {
+			currObs := obs["data"].(map[string]interface{})["observations"].([]interface{})
+
+			if station.daysRead == 0 {
+				station.daysRead++
+				station.observations = currObs
+				continue
+			} else {
+				totObs := append(station.observations, currObs...)
+				resObs := []interface{}{}
+				for _, o := range totObs {
+					dtS := o.(map[string]interface{})["obsTimeUtc"].(string)
+					//2018-07-23T22:59:59Z
+					dt, err := time.Parse(time.RFC3339, dtS)
+					if err != nil {
+						panic(err)
+					}
+
+					if dt.Format("20060102") == date {
+						resObs = append(resObs, o)
+					}
+				}
+
+				obs["data"].(map[string]interface{})["observations"] = resObs
+			}
+		}
 
 		data, err := json.Marshal(obs)
 		if err != nil {

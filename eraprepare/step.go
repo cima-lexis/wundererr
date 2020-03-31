@@ -2,13 +2,18 @@ package eraprepare
 
 import (
 	"fmt"
-	"log"
 	"math"
+	"os"
 	"time"
 
 	"github.com/cima-lexis/wundererr/core"
 	"github.com/fhs/go-netcdf/netcdf"
 )
+
+// dimensions lengths
+var lonLen = uint64(3600)
+var latLen = uint64(1801)
+var timeLen = uint64(24)
 
 func parseDate(dt int32) time.Time {
 	return time.Unix(int64(dt)*60*60-int64(2208988800), 0)
@@ -18,14 +23,8 @@ func createOutputFile(date string, inputData netcdf.Dataset) netcdf.Dataset {
 	eraOutFile := "data/era5-merged-" + date + ".nc"
 	eraOutData, err := netcdf.CreateFile(eraOutFile, netcdf.NETCDF4)
 	if err != nil {
-		log.Println("QUa")
 		panic(err)
 	}
-
-	// dimensions lengths
-	lonLen := uint64(3600)
-	latLen := uint64(1801)
-	timeLen := uint64(24)
 
 	// create dimensions
 	lonDim, err := eraOutData.AddDim("longitude", lonLen)
@@ -198,32 +197,75 @@ func createOutputFile(date string, inputData netcdf.Dataset) netcdf.Dataset {
 	return eraOutData
 }
 
-func Run(date, dateBefore string, domain *core.Domain) {
-	targetFile := "data/era5-merged-" + date + ".nc"
-
+func prepareInputFile(date string) (netcdf.Dataset, map[int]int) {
 	eraFile := "data/era5-" + date + ".nc"
+
 	eraData, err := netcdf.OpenFile(eraFile, netcdf.NOWRITE)
 	if err != nil {
-		log.Println("QUI")
 		panic(err)
 	}
-	defer eraData.Close()
+
+	timeV, err := eraData.Var("time")
+	if err != nil {
+		panic(err)
+	}
+
+	timeValues := make([]int32, 24)
+	err = timeV.ReadInt32s(timeValues)
+	if err != nil {
+		panic(err)
+	}
+
+	timeMap := make(map[int]int)
+
+	for i := 0; i < 24; i++ {
+		dt := parseDate(timeValues[i]).UTC()
+		//if dt.Format("20060102") == date {
+		timeMap[i] = dt.Hour()
+		//}
+
+		//fmt.Println(dt.Format("20060102 15"))
+	}
+
+	return eraData, timeMap
+}
+
+func Run(date string, domain *core.Domain) {
+	targetFile := "data/era5-merged-" + date + ".nc"
+
+	_, err := os.Stat(targetFile)
+	if err == nil {
+		fmt.Printf("[4] ✔️ Skipping era5 prepared file exists: `%s`\n", targetFile)
+		return
+	}
+
+	//eraDataBefore, timeMapBefore := prepareInputFile(dateBefore)
+	eraData, timeMap := prepareInputFile(date)
 
 	eraOutData := createOutputFile(date, eraData)
+	defer eraData.Close()
+	//defer eraDataBefore.Close()
 	defer eraOutData.Close()
 
-	copyVar(0, eraData, eraOutData, "d2m", 0)
-	copyVar(1, eraData, eraOutData, "t2m", 0)
-	copyVar(2, eraData, eraOutData, "u10", -273.15)
-	copyVar(3, eraData, eraOutData, "v10", -273.15)
+	//fmt.Println(timeMapBefore)
+	fmt.Println(timeMap)
+
+	// copyVar(0, eraDataBefore, eraOutData, "d2m", 0, timeMapBefore)
+	// copyVar(1, eraDataBefore, eraOutData, "t2m", 0, timeMapBefore)
+	// copyVar(2, eraDataBefore, eraOutData, "u10", -273.15, timeMapBefore)
+	// copyVar(3, eraDataBefore, eraOutData, "v10", -273.15, timeMapBefore)
+	copyVar(0, eraData, eraOutData, "d2m", -273.15, timeMap)
+	copyVar(1, eraData, eraOutData, "t2m", -273.15, timeMap)
+	copyVar(2, eraData, eraOutData, "u10", 0, timeMap)
+	copyVar(3, eraData, eraOutData, "v10", 0, timeMap)
 
 	fmt.Printf("\033[F")
 	fmt.Printf("\033[K")
-	fmt.Printf("[4] ✔️ Prepared Era5 single file: `%s`\n", targetFile)
+	fmt.Printf("[4] ✔️ Prepared Era5 file: `%s`\n", targetFile)
 
 }
 
-func copyVar(idxVar int, eraData, eraOutData netcdf.Dataset, varName string, deltaConversion float64) {
+func copyVar(idxVar int, eraData, eraOutData netcdf.Dataset, varName string, deltaConversion float64, timeMap map[int]int) {
 	inVar, err := eraData.Var(varName)
 	if err != nil {
 		panic(err)
@@ -247,6 +289,12 @@ func copyVar(idxVar int, eraData, eraOutData netcdf.Dataset, varName string, del
 		panic(err)
 	}
 
+	err = outVar.ReadFloat32s(varDataOut)
+
+	if err != nil {
+		panic(err)
+	}
+
 	scaleFactorVec := []float64{0}
 	err = inVar.Attr("scale_factor").ReadFloat64s(scaleFactorVec)
 	if err != nil {
@@ -263,9 +311,10 @@ func copyVar(idxVar int, eraData, eraOutData netcdf.Dataset, varName string, del
 	addOffset := addOffsetVec[0]
 	idx := uint64(0)
 	lastProgress := float64(0)
+	timeStride := int(latLen * lonLen)
 
 	reportProgress := func() {
-		progress := float64(idxVar)*25.0 + math.Round(float64(idx)*100*100/float64(varLen))/100/4
+		progress := float64(idxVar)*25 + math.Round(float64(idx)*100*100/float64(timeStride*len(timeMap)))/100/4
 		if progress != lastProgress {
 			fmt.Printf("\033[F")
 			fmt.Printf("\033[K")
@@ -274,9 +323,15 @@ func copyVar(idxVar int, eraData, eraOutData netcdf.Dataset, varName string, del
 		}
 	}
 
-	for idx = (0); idx < varLen; idx++ {
-		varDataOut[idx] = float32(float64(varData[idx])*scaleFactor + addOffset + deltaConversion)
-		reportProgress()
+	for hourIn, hourOut := range timeMap {
+		for idxSpace := 0; idxSpace < timeStride; idxSpace++ {
+			idxIn := idxSpace + timeStride*hourIn
+			idxOut := idxSpace + timeStride*hourOut
+
+			varDataOut[idxOut] = float32(float64(varData[idxIn])*scaleFactor + addOffset + deltaConversion)
+			idx++
+			reportProgress()
+		}
 	}
 
 	err = outVar.WriteFloat32s(varDataOut)

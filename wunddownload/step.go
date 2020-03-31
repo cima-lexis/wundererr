@@ -13,6 +13,7 @@ import (
 	"net/http"
 	"os"
 	"sync"
+	"time"
 )
 
 // represents a station as read from json file
@@ -20,6 +21,7 @@ type station struct {
 	ID        string
 	Latitude  float64
 	Longitude float64
+	Tz        int
 }
 
 // kind of result for a single station read
@@ -66,6 +68,11 @@ func readStationsFromFile() []station {
 	return stations
 }
 
+type readRequest struct {
+	stationID string
+	date      time.Time
+}
+
 func Download(date string) {
 	targetFile := "data/wund-" + date + ".json"
 	stations := readStationsFromFile()
@@ -78,7 +85,7 @@ func Download(date string) {
 
 	// write id of stations that downloadObservations
 	// should download
-	stationsToRead := make(chan string)
+	stationsToRead := make(chan readRequest)
 	// read data downloaded in byte buffers chunks
 	stationsRead := make(chan stationResult)
 	// read save operation progress in percentage
@@ -87,14 +94,23 @@ func Download(date string) {
 	allDownloadCompleted := &sync.WaitGroup{}
 	for i := 0; i < 5; i++ {
 		allDownloadCompleted.Add(1)
-		go downloadObservations(date, stationsToRead, stationsRead, allDownloadCompleted)
+		go downloadObservations(stationsToRead, stationsRead, allDownloadCompleted)
 	}
 
 	go saveJSON(len(stations), date, stationsRead, progress)
 
 	go func() {
 		for _, st := range stations {
-			stationsToRead <- st.ID
+			dt, err := time.Parse("20060102", date)
+			if err != nil {
+				panic(err)
+			}
+			stationsToRead <- readRequest{st.ID, dt}
+			// fmt.Println(st.Tz)
+			if st.Tz > 0 {
+				dt = dt.AddDate(0, 0, 1)
+				stationsToRead <- readRequest{st.ID, dt}
+			}
 		}
 
 		close(stationsToRead)
@@ -193,7 +209,8 @@ func saveJSON(totalStations int, date string, stationsRead chan stationResult, p
 			continue
 		}
 
-		fmt.Fprintf(os.Stderr, "Error downloading stations %s: %s\n", chunk.ID, chunk.err.Error())
+		// fmt.Fprintln(os.Stderr, "Error downloading stations", chunk.err, chunk.kind)
+		// fmt.Fprintf(os.Stderr, "Error downloading stations %s: %s\n", chunk.ID, chunk.err.Error())
 
 	}
 	_, err = w.WriteString("\n]\n")
@@ -204,20 +221,22 @@ func saveJSON(totalStations int, date string, stationsRead chan stationResult, p
 
 }
 
+var iii = 0
+
 // download observations hourly aggregations data from weather.com for given date.
 // ID of stations to get is read from stationsToRead channel, and every ID
 // cause a separate GET. This function can be concurrently run on multiple goroutines
 // file downloaded are saved as-is indirectory cache. If same url
 // is required again, that file is read to avoid an http call.
 // buffers read are the emitted on stationsRead channel.
-func downloadObservations(date string, stationsToRead chan string, stationsRead chan stationResult, allDownloadCompleted *sync.WaitGroup) {
-	for stID := range stationsToRead {
-		cacheDir := fmt.Sprintf("data/cache/%s", date)
+func downloadObservations(stationsToRead chan readRequest, stationsRead chan stationResult, allDownloadCompleted *sync.WaitGroup) {
+	for stReq := range stationsToRead {
+		cacheDir := fmt.Sprintf("data/cache/%s", stReq.date.Format("20060102"))
 		if err := os.MkdirAll(cacheDir, os.FileMode(0755)); err != nil && !os.IsExist(err) {
 			log.Fatal(err)
 		}
 
-		fileName := fmt.Sprintf("%s/%s.json", cacheDir, stID)
+		fileName := fmt.Sprintf("%s/%s.json", cacheDir, stReq.stationID)
 
 		apiKey := os.Getenv("WUNDER_HIST_KEY")
 		if apiKey == "" {
@@ -232,7 +251,7 @@ func downloadObservations(date string, stationsToRead chan string, stationsRead 
 
 			if err != nil {
 				stationsRead <- stationResult{
-					ID:     stID,
+					ID:     stReq.stationID,
 					buffer: nil,
 					err:    err,
 					kind:   resultKindErr,
@@ -241,7 +260,7 @@ func downloadObservations(date string, stationsToRead chan string, stationsRead 
 			}
 
 			stationsRead <- stationResult{
-				ID:     stID,
+				ID:     stReq.stationID,
 				buffer: buff,
 				err:    nil,
 				kind:   resultKindFromCache,
@@ -257,19 +276,23 @@ func downloadObservations(date string, stationsToRead chan string, stationsRead 
 			}
 		*/
 
-		log.Fatal("NO DOWNLOAD")
-
-		err = ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
-		if err != nil {
-			log.Fatal(err)
-		}
-
-		url := "https://api.weather.com/v2/pws/history/hourly?stationId=" + stID + "&format=json&units=m&date=" + date + "&apiKey=" + apiKey
+		log.Fatal("NO DOWNLOAD", stReq)
+		/*
+			err = ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
+			if err != nil {
+				log.Fatal(err)
+			}
+		*/
+		url := "https://api.weather.com/v2/pws/history/hourly?stationId=" + stReq.stationID + "&format=json&units=m&date=" + stReq.date.Format("20060102") + "&apiKey=" + apiKey
 
 		buff, err := downloadFile(fileName, url)
 		if err != nil {
+			err2 := ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
+			if err2 != nil {
+				log.Fatal(err2)
+			}
 			stationsRead <- stationResult{
-				ID:     stID,
+				ID:     stReq.stationID,
 				buffer: nil,
 				err:    err,
 				kind:   resultKindErr,
@@ -278,7 +301,7 @@ func downloadObservations(date string, stationsToRead chan string, stationsRead 
 		}
 
 		stationsRead <- stationResult{
-			ID:     stID,
+			ID:     stReq.stationID,
 			buffer: buff,
 			err:    nil,
 			kind:   resultKindDownloaded,
