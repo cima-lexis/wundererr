@@ -20,7 +20,7 @@ func parseDate(dt int32) time.Time {
 }
 
 func createOutputFile(date string, inputData netcdf.Dataset) netcdf.Dataset {
-	eraOutFile := "data/era5-merged-" + date + ".nc"
+	eraOutFile := "data/era5-prepared-" + date + ".nc"
 	eraOutData, err := netcdf.CreateFile(eraOutFile, netcdf.NETCDF4)
 	if err != nil {
 		panic(err)
@@ -142,6 +142,19 @@ func createOutputFile(date string, inputData netcdf.Dataset) netcdf.Dataset {
 		panic(err)
 	}
 
+	// create elevation var
+
+	elevationVar, err := eraOutData.AddVar("elevation", netcdf.SHORT, []netcdf.Dim{latDim, lonDim})
+	if err != nil {
+		panic(err)
+	}
+	if err := elevationVar.Attr("units").WriteBytes([]byte("m")); err != nil {
+		panic(err)
+	}
+	if err := elevationVar.Attr("long_name").WriteBytes([]byte("elevation above sea level")); err != nil {
+		panic(err)
+	}
+
 	// create v10 var
 
 	v10Var, err := eraOutData.AddVar("v10", netcdf.FLOAT, threeDims)
@@ -181,19 +194,6 @@ func createOutputFile(date string, inputData netcdf.Dataset) netcdf.Dataset {
 		panic(err)
 	}
 
-	// create elevation var
-
-	elevationVar, err := eraOutData.AddVar("elevation", netcdf.FLOAT, threeDims)
-	if err != nil {
-		panic(err)
-	}
-	if err := elevationVar.Attr("units").WriteBytes([]byte("m")); err != nil {
-		panic(err)
-	}
-	if err := elevationVar.Attr("long_name").WriteBytes([]byte("elevation")); err != nil {
-		panic(err)
-	}
-
 	return eraOutData
 }
 
@@ -230,8 +230,51 @@ func prepareInputFile(date string) (netcdf.Dataset, map[int]int) {
 	return eraData, timeMap
 }
 
+func readGeoPotential() []int16 {
+	orogFile := "data/orog.nc"
+
+	orogData, err := netcdf.OpenFile(orogFile, netcdf.NOWRITE)
+	if err != nil {
+		panic(err)
+	}
+	defer orogData.Close()
+
+	geopotentialV, err := orogData.Var("z")
+	if err != nil {
+		panic(err)
+	}
+
+	geopotentialValues := make([]int16, latLen*lonLen)
+	err = geopotentialV.ReadInt16s(geopotentialValues)
+	if err != nil {
+		panic(err)
+	}
+
+	scaleFactorVec := []float64{0}
+	err = geopotentialV.Attr("scale_factor").ReadFloat64s(scaleFactorVec)
+	if err != nil {
+		panic(err)
+	}
+
+	addOffsetVec := []float64{0}
+	err = geopotentialV.Attr("add_offset").ReadFloat64s(addOffsetVec)
+	if err != nil {
+		panic(err)
+	}
+
+	scaleFactor := scaleFactorVec[0]
+	addOffset := addOffsetVec[0]
+
+	elevations := make([]int16, latLen*lonLen)
+	for i := uint64(0); i < latLen*lonLen; i++ {
+		elevations[i] = int16((float64(geopotentialValues[i])*scaleFactor + addOffset) / 9.8)
+	}
+
+	return elevations
+}
+
 func Run(date string, domain *core.Domain) {
-	targetFile := "data/era5-merged-" + date + ".nc"
+	targetFile := "data/era5-prepared-" + date + ".nc"
 
 	_, err := os.Stat(targetFile)
 	if err == nil {
@@ -259,10 +302,27 @@ func Run(date string, domain *core.Domain) {
 	copyVar(2, eraData, eraOutData, "u10", 0, timeMap)
 	copyVar(3, eraData, eraOutData, "v10", 0, timeMap)
 
+	elevations := readGeoPotential()
+	addElevationVar(elevations, eraOutData)
+
 	fmt.Printf("\033[F")
 	fmt.Printf("\033[K")
 	fmt.Printf("[4] ✔️ Prepared Era5 file: `%s`\n", targetFile)
 
+}
+
+func addElevationVar(elevations []int16, eraOutData netcdf.Dataset) {
+
+	outVar, err := eraOutData.Var("elevation")
+	if err != nil {
+		panic(err)
+	}
+
+	err = outVar.WriteInt16s(elevations)
+
+	if err != nil {
+		panic(err)
+	}
 }
 
 func copyVar(idxVar int, eraData, eraOutData netcdf.Dataset, varName string, deltaConversion float64, timeMap map[int]int) {
@@ -328,7 +388,16 @@ func copyVar(idxVar int, eraData, eraOutData netcdf.Dataset, varName string, del
 			idxIn := idxSpace + timeStride*hourIn
 			idxOut := idxSpace + timeStride*hourOut
 
-			varDataOut[idxOut] = float32(float64(varData[idxIn])*scaleFactor + addOffset + deltaConversion)
+			if varData[idxIn] == -32767 {
+				varDataOut[idxOut] = float32(-32767)
+			} else {
+				value := float32(float64(varData[idxIn])*scaleFactor + addOffset + deltaConversion)
+				/*if value < 0 {
+					fmt.Printf("%d --> %f\n", varData[idxIn], value)
+				}*/
+				varDataOut[idxOut] = value
+			}
+
 			idx++
 			reportProgress()
 		}

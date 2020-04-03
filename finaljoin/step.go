@@ -22,7 +22,7 @@ var latLen = uint64(1801)
 var timeLen = uint64(24)
 
 func prepareInputFile(date string) (eraData netcdf.Dataset, timeMap map[string]int, lonMap []float32, latMap []float32, timeValues []int32) {
-	eraFile := "data/era5-merged-" + date + ".nc"
+	eraFile := "data/era5-prepared-" + date + ".nc"
 
 	eraData, err := netcdf.OpenFile(eraFile, netcdf.NOWRITE)
 	if err != nil {
@@ -120,10 +120,6 @@ func readObservationsFromFile(date string, obsRead chan map[string]interface{}) 
 	close(obsRead)
 }
 
-func parseDate(dt int32) time.Time {
-	return time.Unix(int64(dt)*60*60-int64(2208988800), 0)
-}
-
 func calcHumRel(d2m_c, t2m_c float64) float64 {
 	return (d2m_c - 0.84*t2m_c + 19.2) / (0.198 + 0.0017*t2m_c)
 }
@@ -203,8 +199,6 @@ func Run(date string, domain *core.Domain) {
 		panic(err)
 	}
 
-
-
 	u10 := make([]float32, timeLen*latLen*lonLen)
 
 	u10V, err := eraData.Var("u10")
@@ -216,8 +210,6 @@ func Run(date string, domain *core.Domain) {
 	if err != nil {
 		panic(err)
 	}
-
-
 
 	v10 := make([]float32, timeLen*latLen*lonLen)
 
@@ -231,8 +223,17 @@ func Run(date string, domain *core.Domain) {
 		panic(err)
 	}
 
+	elevation := make([]int16, latLen*lonLen)
 
+	elevationV, err := eraData.Var("elevation")
+	if err != nil {
+		panic(err)
+	}
 
+	err = elevationV.ReadInt16s(elevation)
+	if err != nil {
+		panic(err)
+	}
 
 	/*
 		for _, dt := range timeValues {
@@ -249,7 +250,7 @@ func Run(date string, domain *core.Domain) {
 	}
 
 	defer outFile.Close()
-	fmt.Fprintf(outFile, "ID,hour,era_t2m,wund_t2m,era_d2m,wund_d2m,era_hum,wund_hum,era_u10,wund_u10,era_v10,wund_v10\n")
+	fmt.Fprintf(outFile, "ID,hour,elevation_era,elevation_wund,era_t2m,wund_t2m,era_d2m,wund_d2m,era_hum,wund_hum,era_u10,wund_u10,era_v10,wund_v10\n")
 
 	errorsFile, err := os.Create(errsFile)
 	if err != nil {
@@ -282,31 +283,37 @@ func Run(date string, domain *core.Domain) {
 		latitude := float32(station["latitude"].(float64))
 		longitude := float32(station["longitude"].(float64))
 		stID := station["ID"].(string)
+		elevationWund := int16(station["elevation"].(float64))
+
 		latIdx := findLatIdx(latitude, latMap)
 		lonIdx := findLonIdx(longitude, lonMap)
 
+		if stID == "IILIRSKA2" {
+			fmt.Println("IILIRSKA2")
+		}
 		var observations []interface{} = station["data"].(map[string]interface{})["observations"].([]interface{})
 
-		totHours := 0
+		totHours := 0.0
 
 		for _, obsInterface := range observations {
-			totHours++
+
 			obsTimeUtc := obsInterface.(map[string]interface{})["obsTimeUtc"].(string)
 			metric := obsInterface.(map[string]interface{})["metric"].(map[string]interface{})
 			tempWund, ok := metric["tempAvg"].(float64)
 			if !ok {
-				tempWund = math.NaN()
+				continue
 			}
 
 			humidityMayBe := obsInterface.(map[string]interface{})["humidityAvg"]
-			humidityWund := math.NaN()
-			if humidityMayBe != nil {
-				humidityWund = humidityMayBe.(float64)
+			if humidityMayBe == nil {
+				continue
 			}
+
+			humidityWund := humidityMayBe.(float64)
 
 			dewpointWund, ok := metric["dewptAvg"].(float64)
 			if !ok {
-				dewpointWund = math.NaN()
+				continue
 			}
 
 			dt, err := time.Parse(time.RFC3339, obsTimeUtc)
@@ -322,12 +329,25 @@ func Run(date string, domain *core.Domain) {
 			t2mEra := float64(t2m[timeIdx*timeStride+latIdx*latStride+lonIdx])
 			d2mEra := float64(d2m[timeIdx*timeStride+latIdx*latStride+lonIdx])
 			humidityEra := float64(calcHumRel(d2mEra, t2mEra))
-			era_u10,wund_u10,era_v10,wund_v10
+			elevationEra := elevation[latIdx*latStride+lonIdx]
+			if elevationWund == -10000 || elevationWund > 4810 {
+				elevationWund = elevationEra
+			}
+			t2mEra += (float64(elevationEra) - float64(elevationWund)) / 100
+			//era_u10,wund_u10,era_v10,wund_v10
+			// mt.Fprintf(outFile, "ID,hour,elevation_era,elevation_wund,era_t2m,wund_t2m,era_d2m,wund_d2m,era_hum,wund_hum,era_u10,wund_u10,era_v10,wund_v10\n")
+
+			if t2mEra == -32767.0 || d2mEra == -32767.0 || humidityEra == -32767.0 {
+				continue
+			}
+
 			fmt.Fprintf(
 				outFile,
-				"%s,%d,%f,%f,%f,%f,%f,%f\n",
+				"%s,%d,%d,%d,%f,%f,%f,%f,%f,%f\n",
 				stID,
 				dt.Hour(),
+				elevationEra,
+				elevationWund,
 				t2mEra,
 				tempWund,
 				d2mEra,
@@ -335,20 +355,26 @@ func Run(date string, domain *core.Domain) {
 				humidityEra,
 				humidityWund,
 			)
-
-			errHum += math.Pow(humidityEra, 2) - math.Pow(humidityWund, 2)
-			errT2m += math.Pow(d2mEra, 2) - math.Pow(dewpointWund, 2)
-			errD2m += math.Pow(t2mEra, 2) - math.Pow(tempWund, 2)
+			totHours++
+			errHum += math.Pow(humidityEra-humidityWund, 2)
+			errD2m += math.Pow(d2mEra-dewpointWund, 2)
+			errT2m += math.Pow(t2mEra-tempWund, 2)
 		}
 
-		errHum /= stationsLen
-		errT2m /= stationsLen
-		errD2m /= stationsLen
-		errHum = math.Sqrt(errHum)
-		errT2m = math.Sqrt(errT2m)
-		errD2m = math.Sqrt(errD2m)
+		if totHours == 0 {
+			errHum = 0
+			errT2m = 0
+			errD2m = 0
+		} else {
+			errHum /= totHours
+			errT2m /= totHours
+			errD2m /= totHours
+			errHum = math.Sqrt(errHum)
+			errT2m = math.Sqrt(errT2m)
+			errD2m = math.Sqrt(errD2m)
+		}
 
-		fmt.Fprintf(errorsFile, "%s,%d,%f,%f,%f\n", stID, totHours, errT2m, errD2m, errHum)
+		fmt.Fprintf(errorsFile, "%s,%d,%f,%f,%f\n", stID, int(totHours), errT2m, errD2m, errHum)
 
 	}
 

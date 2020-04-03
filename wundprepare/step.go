@@ -84,6 +84,11 @@ func readElevationsFromFile() map[string]elev {
 			log.Panic(err)
 		}
 
+		// wunderground elevation is in feet
+		if elevValue != -10000 {
+			elevValue *= 0.3048
+		}
+
 		latValue, err := strconv.ParseFloat(rec[1], 64)
 		if err != io.EOF && err != nil {
 			log.Panic(err)
@@ -244,6 +249,7 @@ func Run(date string) *core.Domain {
 	for obs := range obsRead {
 		idx++
 		el := elevations[obs["ID"].(string)]
+
 		obs["elevation"] = el.elevation
 		obs["latitude"] = el.lat
 		obs["longitude"] = el.lon
