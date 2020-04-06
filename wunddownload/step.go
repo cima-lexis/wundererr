@@ -14,6 +14,8 @@ import (
 	"os"
 	"sync"
 	"time"
+
+	"github.com/cima-lexis/wundererr/wundarchive"
 )
 
 // represents a station as read from json file
@@ -221,8 +223,6 @@ func saveJSON(totalStations int, date string, stationsRead chan stationResult, p
 
 }
 
-var iii = 0
-
 // download observations hourly aggregations data from weather.com for given date.
 // ID of stations to get is read from stationsToRead channel, and every ID
 // cause a separate GET. This function can be concurrently run on multiple goroutines
@@ -231,9 +231,19 @@ var iii = 0
 // buffers read are the emitted on stationsRead channel.
 func downloadObservations(stationsToRead chan readRequest, stationsRead chan stationResult, allDownloadCompleted *sync.WaitGroup) {
 	for stReq := range stationsToRead {
-		cacheDir := fmt.Sprintf("data/cache/%s", stReq.date.Format("20060102"))
-		if err := os.MkdirAll(cacheDir, os.FileMode(0755)); err != nil && !os.IsExist(err) {
-			log.Fatal(err)
+		dtReq := stReq.date.Format("20060102")
+		cacheDir := fmt.Sprintf("data/cache/%s", dtReq)
+		archiveFile := fmt.Sprintf("data/wundarchive/%s.tar.gz", dtReq)
+
+		if _, err := os.Stat(cacheDir); err == nil {
+			if err := os.MkdirAll(cacheDir, os.FileMode(0755)); err != nil {
+				log.Fatal(err)
+			}
+
+			if _, err := os.Stat(archiveFile); err == nil {
+				wundarchive.PrepareArchive(dtReq)
+			}
+
 		}
 
 		fileName := fmt.Sprintf("%s/%s.json", cacheDir, stReq.stationID)
