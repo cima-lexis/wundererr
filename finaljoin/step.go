@@ -294,28 +294,59 @@ func Run(date string, domain *core.Domain) {
 		var observations []interface{} = station["data"].(map[string]interface{})["observations"].([]interface{})
 
 		totHours := 0.0
+		isArchivedCurrentFile := false
 
 		for _, obsInterface := range observations {
-
-			obsTimeUtc := obsInterface.(map[string]interface{})["obsTimeUtc"].(string)
-			metric := obsInterface.(map[string]interface{})["metric"].(map[string]interface{})
-			tempWund, ok := metric["tempAvg"].(float64)
+			tmpMap := obsInterface.(map[string]interface{})
+			obsTimeUtc, ok := tmpMap["obsTimeUtc"].(string)
 			if !ok {
-				continue
+				obsTimeUtc = tmpMap["ObsTimeUtc"].(string)
+				isArchivedCurrentFile = true
 			}
 
-			humidityMayBe := obsInterface.(map[string]interface{})["humidityAvg"]
-			if humidityMayBe == nil {
-				continue
+			var tempWund float64
+			var humidityWund float64
+			var dewpointWund float64
+
+			if isArchivedCurrentFile {
+				metric := tmpMap["Metric"].(map[string]interface{})
+
+				tempWund, ok = metric["TempHigh"].(float64)
+				if !ok {
+					continue
+				}
+
+				humidityMayBe := tmpMap["HumidityHigh"]
+				if humidityMayBe == nil {
+					continue
+				}
+
+				humidityWund = humidityMayBe.(float64)
+
+				dewpointWund, ok = metric["Dewpt"].(float64)
+				if !ok {
+					dewpointWund = -9999.99
+				}
+			} else {
+				metric := tmpMap["metric"].(map[string]interface{})
+
+				tempWund, ok = metric["tempAvg"].(float64)
+				if !ok {
+					continue
+				}
+
+				humidityMayBe := tmpMap["humidityAvg"]
+				if humidityMayBe == nil {
+					continue
+				}
+
+				humidityWund = humidityMayBe.(float64)
+
+				dewpointWund, ok = metric["dewptAvg"].(float64)
+				if !ok {
+					dewpointWund = -9999.99
+				}
 			}
-
-			humidityWund := humidityMayBe.(float64)
-
-			dewpointWund, ok := metric["dewptAvg"].(float64)
-			if !ok {
-				continue
-			}
-
 			dt, err := time.Parse(time.RFC3339, obsTimeUtc)
 			if err != nil {
 				panic(err)

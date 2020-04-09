@@ -22,7 +22,7 @@ func TestArchive(t *testing.T) {
 		panic(err)
 	}
 
-	if err := PrepareArchive("20191129"); err != nil {
+	if err := PrepareArchive("20191128"); err != nil {
 		panic(err)
 	}
 }

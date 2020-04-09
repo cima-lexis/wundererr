@@ -267,7 +267,12 @@ func Run(date string) *core.Domain {
 				totObs := append(station.observations, currObs...)
 				resObs := []interface{}{}
 				for _, o := range totObs {
-					dtS := o.(map[string]interface{})["obsTimeUtc"].(string)
+					tmpMap := o.(map[string]interface{})
+					dtS, ok := tmpMap["obsTimeUtc"].(string)
+					if !ok {
+						dtS = tmpMap["ObsTimeUtc"].(string)
+					}
+
 					//2018-07-23T22:59:59Z
 					dt, err := time.Parse(time.RFC3339, dtS)
 					if err != nil {

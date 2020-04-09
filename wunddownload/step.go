@@ -233,15 +233,24 @@ func downloadObservations(stationsToRead chan readRequest, stationsRead chan sta
 	for stReq := range stationsToRead {
 		dtReq := stReq.date.Format("20060102")
 		cacheDir := fmt.Sprintf("data/cache/%s", dtReq)
-		archiveFile := fmt.Sprintf("data/wundarchive/%s.tar.gz", dtReq)
+		archiveFile := fmt.Sprintf("data/wundarchive/wund-%s.tar.gz", dtReq)
 
-		if _, err := os.Stat(cacheDir); err == nil {
-			if err := os.MkdirAll(cacheDir, os.FileMode(0755)); err != nil {
-				log.Fatal(err)
-			}
+		if _, err := os.Stat(cacheDir); err != nil {
+			if os.IsNotExist(err) {
+				if err := os.MkdirAll(cacheDir, os.FileMode(0755)); err != nil {
+					log.Fatal(err)
+				}
 
-			if _, err := os.Stat(archiveFile); err == nil {
-				wundarchive.PrepareArchive(dtReq)
+				if _, err := os.Stat(archiveFile); err == nil {
+					err = wundarchive.PrepareArchive(dtReq)
+					if err != nil {
+						log.Fatal(err)
+					}
+				} else {
+					if !os.IsNotExist(err) {
+						log.Fatal(err)
+					}
+				}
 			}
 
 		}
@@ -286,13 +295,18 @@ func downloadObservations(stationsToRead chan readRequest, stationsRead chan sta
 			}
 		*/
 
+		// station data not exists, save an empty file to avoid re-download of
+		// same empty data. TODO: differentiate behaviours using date:
+		err = ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
+		if err != nil {
+			log.Fatal(err)
+		}
+
+		fmt.Printf("OBS NOT FOUND FOR %s\n", fileName)
+
+		continue
 		log.Fatal("NO DOWNLOAD", stReq)
-		/*
-			err = ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
-			if err != nil {
-				log.Fatal(err)
-			}
-		*/
+
 		url := "https://api.weather.com/v2/pws/history/hourly?stationId=" + stReq.stationID + "&format=json&units=m&date=" + stReq.date.Format("20060102") + "&apiKey=" + apiKey
 
 		buff, err := downloadFile(fileName, url)
