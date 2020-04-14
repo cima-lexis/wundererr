@@ -1,9 +1,7 @@
 package main
 
 import (
-	"log"
 	"os"
-	"time"
 
 	"github.com/cima-lexis/wundererr/eradownload"
 	"github.com/cima-lexis/wundererr/eraprepare"
@@ -11,14 +9,6 @@ import (
 	"github.com/cima-lexis/wundererr/wunddownload"
 	"github.com/cima-lexis/wundererr/wundprepare"
 )
-
-func datePrev(date string) string {
-	dt, err := time.Parse("20060102", date)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return dt.AddDate(0, 0, -1).Format("20060102")
-}
 
 func main() {
 	date := os.Args[1]
