@@ -12,6 +12,7 @@ import (
 	"math"
 	"net/http"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -277,6 +278,8 @@ func downloadObservations(stationsToRead chan readRequest, stationsRead chan sta
 				}
 				continue
 			}
+
+			buff = []byte(strings.ReplaceAll(string(buff), "\n", ""))
 
 			stationsRead <- stationResult{
 				ID:     stReq.stationID,
