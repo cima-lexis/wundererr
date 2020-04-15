@@ -26,7 +26,7 @@ func Download(date string) {
 		return
 	}
 
-	cmd := exec.Command("python3", "eradownload/cds.py", date, targetFile)
+	cmd := exec.Command("python2", "eradownload/cds.py", date, targetFile)
 
 	stdout, err := cmd.StderrPipe()
 	if err != nil {
