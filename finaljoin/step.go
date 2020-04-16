@@ -250,7 +250,7 @@ func Run(date string, domain *core.Domain) {
 	}
 
 	defer outFile.Close()
-	fmt.Fprintf(outFile, "ID,hour,elevation_era,elevation_wund,era_t2m,wund_t2m,era_d2m,wund_d2m,era_hum,wund_hum,era_u10,wund_u10,era_v10,wund_v10\n")
+	fmt.Fprintf(outFile, "ID,hour,elevation_era,elevation_wund,era_t2m,wund_t2m,era_d2m,wund_d2m,era_hum,wund_hum,era_windspeed,wund_windspeed\n")
 
 	errorsFile, err := os.Create(errsFile)
 	if err != nil {
@@ -258,7 +258,7 @@ func Run(date string, domain *core.Domain) {
 	}
 
 	defer errorsFile.Close()
-	fmt.Fprintf(errorsFile, "ID,tot_hours,err_t2m,err_d2m,err_hum\n")
+	fmt.Fprintf(errorsFile, "ID,tot_hours,err_t2m,err_d2m,err_hum,err_winspeed\n")
 
 	stations := readStationsFromFile()
 	idx := 0.0
@@ -270,6 +270,7 @@ func Run(date string, domain *core.Domain) {
 		errHum := 0.0
 		errT2m := 0.0
 		errD2m := 0.0
+		errWind := 0.0
 
 		progress := math.Round(idx*100*100/stationsLen) / 100
 		if progress != lastProgress {
@@ -288,65 +289,42 @@ func Run(date string, domain *core.Domain) {
 		latIdx := findLatIdx(latitude, latMap)
 		lonIdx := findLonIdx(longitude, lonMap)
 
-		if stID == "IILIRSKA2" {
-			fmt.Println("IILIRSKA2")
-		}
 		var observations []interface{} = station["data"].(map[string]interface{})["observations"].([]interface{})
 
 		totHours := 0.0
-		isArchivedCurrentFile := false
 
 		for _, obsInterface := range observations {
 			tmpMap := obsInterface.(map[string]interface{})
-			obsTimeUtc, ok := tmpMap["obsTimeUtc"].(string)
-			if !ok {
-				obsTimeUtc = tmpMap["ObsTimeUtc"].(string)
-				isArchivedCurrentFile = true
-			}
+			obsTimeUtc := tmpMap["obsTimeUtc"].(string)
 
 			var tempWund float64
 			var humidityWund float64
 			var dewpointWund float64
 
-			if isArchivedCurrentFile {
-				metric := tmpMap["Metric"].(map[string]interface{})
+			metric := tmpMap["metric"].(map[string]interface{})
 
-				tempWund, ok = metric["TempHigh"].(float64)
-				if !ok {
-					continue
-				}
-
-				humidityMayBe := tmpMap["HumidityHigh"]
-				if humidityMayBe == nil {
-					continue
-				}
-
-				humidityWund = humidityMayBe.(float64)
-
-				dewpointWund, ok = metric["Dewpt"].(float64)
-				if !ok {
-					dewpointWund = -9999.99
-				}
-			} else {
-				metric := tmpMap["metric"].(map[string]interface{})
-
-				tempWund, ok = metric["tempAvg"].(float64)
-				if !ok {
-					continue
-				}
-
-				humidityMayBe := tmpMap["humidityAvg"]
-				if humidityMayBe == nil {
-					continue
-				}
-
-				humidityWund = humidityMayBe.(float64)
-
-				dewpointWund, ok = metric["dewptAvg"].(float64)
-				if !ok {
-					dewpointWund = -9999.99
-				}
+			tempWund, ok := metric["tempAvg"].(float64)
+			if !ok {
+				continue
 			}
+
+			humidityMayBe := tmpMap["humidityAvg"]
+			if humidityMayBe == nil {
+				continue
+			}
+
+			humidityWund = humidityMayBe.(float64)
+
+			dewpointWund, ok = metric["dewptAvg"].(float64)
+			if !ok {
+				dewpointWund = -9999.99
+			}
+
+			windspeedWund, ok := metric["windspeedAvg"].(float64)
+			if !ok {
+				windspeedWund = -9999.99
+			}
+
 			dt, err := time.Parse(time.RFC3339, obsTimeUtc)
 			if err != nil {
 				panic(err)
@@ -359,6 +337,12 @@ func Run(date string, domain *core.Domain) {
 			//}
 			t2mEra := float64(t2m[timeIdx*timeStride+latIdx*latStride+lonIdx])
 			d2mEra := float64(d2m[timeIdx*timeStride+latIdx*latStride+lonIdx])
+
+			u10Era := float64(u10[timeIdx*timeStride+latIdx*latStride+lonIdx])
+			v10Era := float64(v10[timeIdx*timeStride+latIdx*latStride+lonIdx])
+
+			windspeedEra := math.Sqrt(math.Pow(u10Era, 2) + math.Pow(v10Era, 2))
+
 			humidityEra := float64(calcHumRel(d2mEra, t2mEra))
 			elevationEra := elevation[latIdx*latStride+lonIdx]
 			if elevationWund == -10000 || elevationWund > 4810 {
@@ -374,7 +358,7 @@ func Run(date string, domain *core.Domain) {
 
 			fmt.Fprintf(
 				outFile,
-				"%s,%d,%d,%d,%f,%f,%f,%f,%f,%f\n",
+				"%s,%d,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f\n",
 				stID,
 				dt.Hour(),
 				elevationEra,
@@ -385,27 +369,33 @@ func Run(date string, domain *core.Domain) {
 				dewpointWund,
 				humidityEra,
 				humidityWund,
+				windspeedEra,
+				windspeedWund,
 			)
 			totHours++
 			errHum += math.Pow(humidityEra-humidityWund, 2)
 			errD2m += math.Pow(d2mEra-dewpointWund, 2)
 			errT2m += math.Pow(t2mEra-tempWund, 2)
+			errWind += math.Pow(windspeedEra-windspeedWund, 2)
 		}
 
 		if totHours == 0 {
 			errHum = 0
 			errT2m = 0
 			errD2m = 0
+			errWind = 0
 		} else {
 			errHum /= totHours
 			errT2m /= totHours
 			errD2m /= totHours
+			errWind /= totHours
 			errHum = math.Sqrt(errHum)
 			errT2m = math.Sqrt(errT2m)
 			errD2m = math.Sqrt(errD2m)
+			errWind = math.Sqrt(errWind)
 		}
 
-		fmt.Fprintf(errorsFile, "%s,%d,%f,%f,%f\n", stID, int(totHours), errT2m, errD2m, errHum)
+		fmt.Fprintf(errorsFile, "%s,%d,%f,%f,%f,%f\n", stID, int(totHours), errT2m, errD2m, errHum, errWind)
 
 	}
 
