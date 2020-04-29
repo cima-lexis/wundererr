@@ -358,9 +358,11 @@ func Run(date string, domain *core.Domain) {
 
 			fmt.Fprintf(
 				outFile,
-				"%s,%d,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f\n",
+				"%s,%d,%f,%f,%d,%d,%f,%f,%f,%f,%f,%f,%f,%f\n",
 				stID,
 				dt.Hour(),
+				latitude,
+				longitude,
 				elevationEra,
 				elevationWund,
 				t2mEra,
@@ -395,7 +397,7 @@ func Run(date string, domain *core.Domain) {
 			errWind = math.Sqrt(errWind)
 		}
 
-		fmt.Fprintf(errorsFile, "%s,%d,%f,%f,%f,%f\n", stID, int(totHours), errT2m, errD2m, errHum, errWind)
+		fmt.Fprintf(errorsFile, "%s,%d,%f,%f,%f,%f,%f,%f\n", stID, int(totHours), latitude, longitude, errT2m, errD2m, errHum, errWind)
 
 	}
 
