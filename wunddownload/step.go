@@ -95,7 +95,7 @@ func Download(date string) {
 	progress := make(chan float32)
 
 	allDownloadCompleted := &sync.WaitGroup{}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 50; i++ {
 		allDownloadCompleted.Add(1)
 		go downloadObservations(stationsToRead, stationsRead, allDownloadCompleted)
 	}
@@ -305,10 +305,10 @@ func downloadObservations(stationsToRead chan readRequest, stationsRead chan sta
 			log.Fatal(err)
 		}
 
-		fmt.Printf("OBS NOT FOUND FOR %s\n", fileName)
+		//fmt.Printf("OBS NOT FOUND FOR %s\n", fileName)
 
-		continue
-		log.Fatal("NO DOWNLOAD", stReq)
+		//continue
+		//log.Fatal("NO DOWNLOAD", stReq)
 
 		url := "https://api.weather.com/v2/pws/history/hourly?stationId=" + stReq.stationID + "&format=json&units=m&date=" + stReq.date.Format("20060102") + "&apiKey=" + apiKey
 
