@@ -250,7 +250,7 @@ func Run(date string, domain *core.Domain) {
 	}
 
 	defer outFile.Close()
-	fmt.Fprintf(outFile, "ID,hour,elevation_era,elevation_wund,era_t2m,wund_t2m,era_d2m,wund_d2m,era_hum,wund_hum,era_windspeed,wund_windspeed\n")
+	fmt.Fprintf(outFile, "ID,hour,latitude,longitude,elevation_era,elevation_wund,era_t2m,wund_t2m,era_d2m,wund_d2m,era_hum,wund_hum,era_windspeed,wund_windspeed\n")
 
 	errorsFile, err := os.Create(errsFile)
 	if err != nil {
@@ -258,7 +258,7 @@ func Run(date string, domain *core.Domain) {
 	}
 
 	defer errorsFile.Close()
-	fmt.Fprintf(errorsFile, "ID,tot_hours,err_t2m,err_d2m,err_hum,err_winspeed\n")
+	fmt.Fprintf(errorsFile, "ID,tot_hours,latitude,longitude,err_t2m,err_d2m,err_hum,err_winspeed\n")
 
 	stations := readStationsFromFile()
 	idx := 0.0
