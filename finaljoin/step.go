@@ -153,7 +153,13 @@ func Run(date string, domain *core.Domain) {
 		}
 
 		idx := sort.Search(len(coordMap), searchFn)
+
 		if idx < len(coordMap) {
+			// returns idx-1 if that latitude is nearest than idx to the one
+			// we are searching
+			if coordMap[idx-1]-coordToFind < coordToFind-coordMap[idx] {
+				return uint64(idx - 1)
+			}
 			return uint64(idx)
 		}
 
@@ -166,9 +172,23 @@ func Run(date string, domain *core.Domain) {
 			return coordMap[i] > coordToFind
 		}
 
+		// convert coordToFind from -180°:180° to 0°-360°
+		if coordToFind < 0 {
+			coordToFind = 360 + coordToFind
+		}
 		idx := sort.Search(len(coordMap), searchFn)
+
 		if idx < len(coordMap) {
+			// returns idx-1 if that longitude is nearest than idx to the one
+			// we are searching
+			if coordToFind-coordMap[idx-1] < coordMap[idx]-coordToFind {
+				return uint64(idx - 1)
+			}
 			return uint64(idx)
+		}
+		// wrap rightmost longitude to leftmost one (360° == 0°)
+		if idx == len(coordMap) {
+			return uint64(0)
 		}
 
 		log.Panicf("%f not found\n", coordToFind)
