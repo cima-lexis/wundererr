@@ -285,6 +285,7 @@ func Run(date string, domain *core.Domain) {
 	stationsLen := float64(len(stations))
 	lastProgress := 0.0
 
+StationLoop:
 	for station := range obsRead {
 
 		errHum := 0.0
@@ -308,6 +309,31 @@ func Run(date string, domain *core.Domain) {
 
 		latIdx := findLatIdx(latitude, latMap)
 		lonIdx := findLonIdx(longitude, lonMap)
+
+		cellIsMissing := func(deltaLat, deltaLon, timeIdx int64) bool {
+			d2mEra := d2m[timeIdx*int64(timeStride)+(int64(latIdx)+deltaLat)*int64(latStride)+int64(lonIdx)+deltaLon]
+			return d2mEra == -32767.0
+		}
+		if cellIsMissing(0, 0, 0) {
+
+			found := false
+
+		DeltaLoop:
+			for deltaLat := int64(-2); deltaLat <= 2; deltaLat++ {
+				for deltaLon := int64(-2); deltaLon <= 2; deltaLon++ {
+					if !cellIsMissing(deltaLat, deltaLon, 0) {
+						latIdx = uint64(int64(latIdx) + deltaLat)
+						lonIdx = uint64(int64(lonIdx) + deltaLon)
+						found = true
+						break DeltaLoop
+					}
+				}
+			}
+
+			if !found {
+				continue StationLoop
+			}
+		}
 
 		var observations []interface{} = station["data"].(map[string]interface{})["observations"].([]interface{})
 
@@ -373,7 +399,7 @@ func Run(date string, domain *core.Domain) {
 			// mt.Fprintf(outFile, "ID,hour,elevation_era,elevation_wund,era_t2m,wund_t2m,era_d2m,wund_d2m,era_hum,wund_hum,era_u10,wund_u10,era_v10,wund_v10\n")
 
 			if t2mEra == -32767.0 || d2mEra == -32767.0 || humidityEra == -32767.0 {
-				continue
+				break
 			}
 
 			fmt.Fprintf(
