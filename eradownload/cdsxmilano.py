@@ -33,7 +33,7 @@ def download_month(year, month):
                 'format': 'grib',
                 'variable': [
                     'relative_humidity', 'temperature', 'u_component_of_wind',
-                    'v_component_of_wind',
+                    'v_component_of_wind', 'specific_humidity', 'geopotential'
                 ],
                 'pressure_level': [
                     '1', '2', '3',
@@ -50,14 +50,14 @@ def download_month(year, month):
                     '925', '950', '975',
                     '1000',
                 ],
-                'area': [-14.0, 32.0, 59.0, 27.0],
+                'area': [60, -14, 26, 32],
             },
             single_date.strftime("multi-level-%Y-%m-%d.grb"))
 
         c.retrieve(
             'reanalysis-era5-single-levels',
             {
-                'area': [-14.0, 32.0, 59.0, 27.0],
+                'area': [60, -14, 26, 32],
                 'variable': [
                     'geopotential',
                     '10m_u_component_of_wind',
@@ -80,7 +80,6 @@ def download_month(year, month):
                     'volumetric_soil_water_layer_2',
                     'volumetric_soil_water_layer_3',
                     'volumetric_soil_water_layer_4',
-
                 ],
                 'year': str(year),
                 'month': str(month),
