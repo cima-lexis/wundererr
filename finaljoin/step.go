@@ -371,6 +371,9 @@ StationLoop:
 				windspeedWund = -9999.99
 			}
 
+			// convert from km/h to m/s
+			windspeedWund *= 0.277778
+
 			dt, err := time.Parse(time.RFC3339, obsTimeUtc)
 			if err != nil {
 				panic(err)
