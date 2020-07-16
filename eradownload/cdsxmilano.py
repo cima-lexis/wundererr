@@ -54,21 +54,25 @@ def download_half_day(year, month, day, half):
                 '10m_v_component_of_wind',
                 '2m_temperature',
                 '2m_dewpoint_temperature',
+
                 'land_sea_mask',
                 'surface_pressure',
                 'mean_sea_level_pressure',
                 'skin_temperature',
                 'sea_ice_cover',
+
                 'sea_surface_temperature',
                 'snow_density',
                 'snow_depth',
                 'soil_temperature_level_1',
                 'soil_temperature_level_2',
+
                 'soil_temperature_level_3',
                 'soil_temperature_level_4',
                 'volumetric_soil_water_layer_1',
                 'volumetric_soil_water_layer_2',
                 'volumetric_soil_water_layer_3',
+
                 'volumetric_soil_water_layer_4',
             ],
             'year': str(year),
