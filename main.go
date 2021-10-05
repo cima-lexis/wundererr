@@ -14,7 +14,7 @@ func main() {
 	date := os.Args[1]
 
 	wunddownload.Download(date)
-
+	return
 	domain := wundprepare.Run(date)
 	// fmt.Printf("%f:%f - %f:%f\n", domain.MinLat, domain.MinLon, domain.MaxLat, domain.MaxLon)
 
