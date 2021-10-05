@@ -10,8 +10,11 @@
       "request": "launch",
       "mode": "auto",
       "program": "${workspaceFolder}/main.go",
-      "env": {},
-      "args": ["20190131"]
+      "env": {
+        "WUNDER_HIST_KEY": "e4501b94ca544990901b94ca5439906e"
+        
+      },
+      "args": ["20180701"]
     }
   ]
 }

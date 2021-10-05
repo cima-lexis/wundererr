@@ -298,12 +298,14 @@ func downloadObservations(stationsToRead chan readRequest, stationsRead chan sta
 			}
 		*/
 
-		// station data not exists, save an empty file to avoid re-download of
-		// same empty data. TODO: differentiate behaviours using date:
-		err = ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
-		if err != nil {
-			log.Fatal(err)
-		}
+		/*
+			// station data not exists, save an empty file to avoid re-download of
+			// same empty data. TODO: differentiate behaviours using date:
+			err = ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
+			if err != nil {
+				log.Fatal(err)
+			}
+		*/
 
 		//fmt.Printf("OBS NOT FOUND FOR %s\n", fileName)
 
@@ -314,6 +316,7 @@ func downloadObservations(stationsToRead chan readRequest, stationsRead chan sta
 
 		buff, err := downloadFile(fileName, url)
 		if err != nil {
+			log.Fatal(err)
 			err2 := ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
 			if err2 != nil {
 				log.Fatal(err2)
