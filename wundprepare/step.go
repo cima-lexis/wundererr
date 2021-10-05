@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"io/ioutil"
@@ -146,21 +147,26 @@ func domainForStations(stations []station) *core.Domain {
 
 func readObservationsFromFile(date string, obsRead chan map[string]interface{}) {
 	sourceFile := "data/wund-" + date + ".json"
-	jsonFile, err := os.Open(sourceFile)
-	if err != nil {
-		log.Panic(err)
+
+	checkOrPanic := func(err error) {
+		if err != nil {
+			log.Panicf("Error while reading file %s: %s", sourceFile, err)
+		}
 	}
+
+	jsonFile, err := os.Open(sourceFile)
+	checkOrPanic(err)
+
 	defer jsonFile.Close()
 
 	jsonReader := bufio.NewReader(jsonFile)
 
 	// skip firt line - [
 	line, _, err := jsonReader.ReadLine()
-	if err != nil {
-		log.Panic(err)
-	}
+	checkOrPanic(err)
+
 	if strings.TrimSpace(string(line)) != "[" {
-		log.Panic(err)
+		checkOrPanic(errors.New("Expecting ["))
 	}
 
 	for {
@@ -168,26 +174,20 @@ func readObservationsFromFile(date string, obsRead chan map[string]interface{}) 
 		obsString := []byte{}
 		for i := 0; i < 5; i++ {
 			line, err := jsonReader.ReadString('\n')
-			//fmt.Println(i, string(line))
-			if err != nil {
-				log.Panic(err)
-			}
+			checkOrPanic(err)
 			obsString = append(obsString, line...)
 		}
 		//fmt.Println(string(obsString))
 		var observation map[string]interface{}
 
 		err = json.Unmarshal(obsString, &observation)
-		if err != nil {
-			log.Panic(err)
-		}
+		checkOrPanic(err)
+
 		obsRead <- observation
 
 		// skip sep line - ,
 		line, _, err = jsonReader.ReadLine()
-		if err != nil {
-			log.Panic(err)
-		}
+		checkOrPanic(err)
 
 		if strings.TrimSpace(string(line)) != "," {
 			break
