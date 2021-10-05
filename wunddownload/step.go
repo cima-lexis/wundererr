@@ -95,7 +95,7 @@ func Download(date string) {
 	progress := make(chan float32)
 
 	allDownloadCompleted := &sync.WaitGroup{}
-	for i := 0; i < 5; i++ {
+	for i := 0; i < 50; i++ {
 		allDownloadCompleted.Add(1)
 		go downloadObservations(stationsToRead, stationsRead, allDownloadCompleted)
 	}
@@ -298,22 +298,25 @@ func downloadObservations(stationsToRead chan readRequest, stationsRead chan sta
 			}
 		*/
 
-		// station data not exists, save an empty file to avoid re-download of
-		// same empty data. TODO: differentiate behaviours using date:
-		err = ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
-		if err != nil {
-			log.Fatal(err)
-		}
+		/*
+			// station data not exists, save an empty file to avoid re-download of
+			// same empty data. TODO: differentiate behaviours using date:
+			err = ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
+			if err != nil {
+				log.Fatal(err)
+			}
+		*/
 
-		fmt.Printf("OBS NOT FOUND FOR %s\n", fileName)
+		//fmt.Printf("OBS NOT FOUND FOR %s\n", fileName)
 
-		continue
-		log.Fatal("NO DOWNLOAD", stReq)
+		//continue
+		//log.Fatal("NO DOWNLOAD", stReq)
 
 		url := "https://api.weather.com/v2/pws/history/hourly?stationId=" + stReq.stationID + "&format=json&units=m&date=" + stReq.date.Format("20060102") + "&apiKey=" + apiKey
 
 		buff, err := downloadFile(fileName, url)
 		if err != nil {
+			log.Fatal(err)
 			err2 := ioutil.WriteFile(fileName, []byte("{\"observations\": []}"), os.FileMode(0644))
 			if err2 != nil {
 				log.Fatal(err2)
