@@ -215,6 +215,7 @@ func buildStationsByCode(stations []station) map[string]*stationDataBuffer {
 	return index
 }
 
+// Run ...
 func Run(date string) *core.Domain {
 	targetFile := "data/prep-wund-" + date + ".json"
 	stations := readStationsFromFile()
